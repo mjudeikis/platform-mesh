@@ -3,5 +3,6 @@
 {{- $profile = required (printf "unknown ocm.profile %q: no files/%s-profile.yaml exists" .Values.ocm.profile .Values.ocm.profile) $profile }}
 {{- $profile = replace "__EXTERNAL_PORT__" (printf "%v" .Values.gateway.port) $profile }}
 {{- $profile = replace "__GATEWAY_CLASS_NAME__" (.Values.gateway.className | default "traefik") $profile }}
+{{- $profile = replace "__GATEWAY_CLUSTER_IP__" (.Values.gateway.clusterIP | toString) $profile }}
 {{ $profile }}
 {{- end }}
