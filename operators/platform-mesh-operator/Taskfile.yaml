@@ -177,6 +177,15 @@ tasks:
             for manifest in "${apigen_crds[@]}"; do
                 cp "${manifest}" {{.CRD_DIRECTORY}}/apigen/crds
             done
+            # Seed the output dir with the committed schemas: apigen keeps a
+            # schema's name (v<date>-<git sha>.<resource>.<group>) only when it
+            # finds the previous one in its output dir and the content is
+            # unchanged. Without this every run on a new commit renames them.
+            for dest in "${apigen_dest[@]}"; do
+                case "$(basename "${dest}")" in
+                    apiresourceschema-*) [ -f "${dest}" ] && cp "${dest}" {{.CRD_DIRECTORY}}/apigen/out/ ;;
+                esac
+            done
 
             BOILERPLATE={{.HACK}}/boilerplate/boilerplate.yaml.txt
 

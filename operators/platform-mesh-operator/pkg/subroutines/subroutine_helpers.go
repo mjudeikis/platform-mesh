@@ -353,9 +353,12 @@ func IsWorkspace(dir string) bool {
 	return match
 }
 
+// ListFiles returns the manifest files (*.yaml, *.yml) directly in dir.
+// Other files are ignored: the manifest directories also hold Go sources
+// (manifests/kcp/embed.go exposes them as an embed.FS) that must not be
+// applied.
 func ListFiles(dir string) ([]string, error) {
 	files := []string{}
-	// find all files in the directory
 	dirs, err := os.ReadDir(dir)
 	if err != nil {
 		return files, errors.Wrap(err, "Failed to read directory")
@@ -364,7 +367,10 @@ func ListFiles(dir string) ([]string, error) {
 		if d.IsDir() {
 			continue
 		}
-		files = append(files, d.Name())
+		switch filepath.Ext(d.Name()) {
+		case ".yaml", ".yml":
+			files = append(files, d.Name())
+		}
 	}
 	return files, nil
 }

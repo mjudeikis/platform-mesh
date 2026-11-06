@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/pem"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -200,38 +201,20 @@ func (s *HelperTestSuite) TestGetWorkspaceName() {
 }
 
 func (s *HelperTestSuite) TestListFiles() {
-	// Create a temporary directory
-	dir, err := os.MkdirTemp("", "listfiles-test")
-	s.Require().NoError(err)
-	defer os.RemoveAll(dir) //nolint:errcheck
+	dir := s.T().TempDir()
 
-	// Create some files and subdirectories
-	files := []string{"file1.txt", "file2.yaml", "file3"}
-	subdirs := []string{"subdir1", "subdir2"}
-	for _, fname := range files {
-		f, err := os.CreateTemp(dir, fname)
-		s.Require().NoError(err)
-		f.Close() //nolint:errcheck
+	// Only manifests are listed: Go sources (manifests/kcp/embed.go), text
+	// files and subdirectories are not.
+	for _, name := range []string{"a.yaml", "b.yml", "embed.go", "notes.txt", "README"} {
+		s.Require().NoError(os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600))
 	}
-	for _, dname := range subdirs {
-		_, err := os.MkdirTemp(dir, dname)
-		s.Require().NoError(err)
+	for _, name := range []string{"01-sub", "other.yaml"} {
+		s.Require().NoError(os.Mkdir(filepath.Join(dir, name), 0o700))
 	}
 
-	// Get the expected file names (os.CreateTemp adds random suffix)
-	entries, err := os.ReadDir(dir)
-	s.Require().NoError(err)
-	expected := []string{}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			expected = append(expected, entry.Name())
-		}
-	}
-
-	// Call ListFiles
 	result, err := ListFiles(dir)
 	s.Require().NoError(err)
-	s.ElementsMatch(expected, result)
+	s.ElementsMatch([]string{"a.yaml", "b.yml"}, result)
 }
 
 func (s *HelperTestSuite) TestListFiles_DirectoryNotExist() {
