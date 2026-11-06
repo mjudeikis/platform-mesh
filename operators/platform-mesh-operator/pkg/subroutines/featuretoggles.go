@@ -18,7 +18,7 @@ package subroutines
 
 import (
 	"context"
-	"path/filepath"
+	"io/fs"
 	"time"
 
 	pmcorev1alpha1 "go.platform-mesh.io/apis/core/v1alpha1"
@@ -27,6 +27,7 @@ import (
 	"go.platform-mesh.io/golang-commons/logger"
 	"go.platform-mesh.io/platform-mesh-operator/internal/config"
 	"go.platform-mesh.io/platform-mesh-operator/internal/metrics"
+	"go.platform-mesh.io/platform-mesh-operator/manifests"
 	"go.platform-mesh.io/subroutines"
 
 	"k8s.io/client-go/rest"
@@ -46,20 +47,21 @@ func (defaultKubeconfigBuilder) Build(ctx context.Context, client ctrlruntimecli
 }
 
 type FeatureToggleSubroutine struct {
-	client             ctrlruntimeclient.Client
-	workspaceDirectory string
-	kcpUrl             string
-	kubeconfigBuilder  KubeconfigBuilder
-	kcpHelper          KcpHelper
+	client ctrlruntimeclient.Client
+	// features is the manifests/features tree (manifests.Features).
+	features          fs.FS
+	kcpUrl            string
+	kubeconfigBuilder KubeconfigBuilder
+	kcpHelper         KcpHelper
 }
 
-func NewFeatureToggleSubroutine(client ctrlruntimeclient.Client, helper KcpHelper, operatorCfg *config.OperatorConfig, kcpUrl string) *FeatureToggleSubroutine {
+func NewFeatureToggleSubroutine(client ctrlruntimeclient.Client, helper KcpHelper, kcpUrl string) *FeatureToggleSubroutine {
 	return &FeatureToggleSubroutine{
-		client:             client,
-		workspaceDirectory: filepath.Join(operatorCfg.WorkspaceDir, "/manifests/features/"),
-		kcpUrl:             kcpUrl,
-		kubeconfigBuilder:  defaultKubeconfigBuilder{},
-		kcpHelper:          helper,
+		client:            client,
+		features:          manifests.Features(),
+		kcpUrl:            kcpUrl,
+		kubeconfigBuilder: defaultKubeconfigBuilder{},
+		kcpHelper:         helper,
 	}
 }
 
@@ -93,7 +95,7 @@ func (r *FeatureToggleSubroutine) Process(ctx context.Context, runtimeObj ctrlru
 		switch ft.Name {
 		case "feature-enable-getting-started":
 			// Implement the logic to enable the getting started feature
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-enable-getting-started")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-enable-getting-started")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply getting started manifests")
 				return subroutines.OK(), applyErr
@@ -101,7 +103,7 @@ func (r *FeatureToggleSubroutine) Process(ctx context.Context, runtimeObj ctrlru
 			log.Info().Msg("Enabled 'Getting started configuration' feature")
 		case "feature-enable-marketplace-account":
 			// Implement the logic to enable the marketplace feature
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-enable-marketplace-account")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-enable-marketplace-account")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply marketplace manifests")
 				return subroutines.OK(), applyErr
@@ -109,35 +111,35 @@ func (r *FeatureToggleSubroutine) Process(ctx context.Context, runtimeObj ctrlru
 			log.Info().Msg("Enabled 'Marketplace configuration' feature")
 		case "feature-enable-marketplace-org":
 			// Implement the logic to enable the marketplace feature
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-enable-marketplace-org")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-enable-marketplace-org")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply marketplace manifests")
 				return subroutines.OK(), applyErr
 			}
 			log.Info().Msg("Enabled 'Marketplace configuration' feature")
 		case "feature-accounts-in-accounts":
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-accounts-in-accounts")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-accounts-in-accounts")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply accounts-in-accounts manifests")
 				return subroutines.OK(), applyErr
 			}
 			log.Info().Msg("Enabled 'Accounts in accounts' feature")
 		case "feature-enable-account-iam-ui":
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-enable-account-iam-ui")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-enable-account-iam-ui")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply account-iam-ui manifests")
 				return subroutines.OK(), applyErr
 			}
 			log.Info().Msg("Enabled 'Account IAM UI' feature")
 		case "feature-enable-terminal-controller-manager":
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-enable-terminal-controller-manager")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-enable-terminal-controller-manager")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply terminal-controller-manager manifests")
 				return subroutines.OK(), applyErr
 			}
 			log.Info().Msg("Enabled 'Terminal controller manager' feature")
 		case "feature-enable-provider-permissions":
-			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "/feature-enable-provider-permissions")
+			_, applyErr := r.applyKcpManifests(ctx, inst, operatorCfg, "feature-enable-provider-permissions")
 			if applyErr != nil {
 				log.Error().Err(applyErr).Msg("Failed to apply provider-permissions manifests")
 				return subroutines.OK(), applyErr
@@ -176,13 +178,13 @@ func (r *FeatureToggleSubroutine) applyKcpManifests(
 		return subroutines.OK(), gcerrors.Wrap(err, "Failed to build kubeconfig")
 	}
 
-	dir := r.workspaceDirectory + kcpDir
+	dir := kcpDir
 
 	tplValues := make(map[string]any)
 	for k, v := range getExposureParams(inst, operatorCfg.Exposure).templateVars(operatorCfg.KCP) {
 		tplValues[k] = v
 	}
-	err = ApplyDirStructure(ctx, dir, "root", cfg, tplValues, inst, r.kcpHelper, operatorCfg.Subroutines.Deployment.IgnoredResources)
+	err = ApplyDirStructure(ctx, r.features, dir, "root", cfg, tplValues, inst, r.kcpHelper, operatorCfg.Subroutines.Deployment.IgnoredResources)
 	if err != nil {
 		log.Err(err).Msg("Failed to apply dir structure")
 		return subroutines.OK(), gcerrors.Wrap(err, "Failed to apply dir structure")

@@ -21,7 +21,6 @@ import (
 	"context"
 	stderrors "errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -68,6 +67,7 @@ func updateObjectMetadata(existing, desired *unstructured.Unstructured) {
 // postProcessObj, if non-nil, is called on each rendered object before applying.
 func (r *DeploymentSubroutine) renderAndApplyTemplates(
 	ctx context.Context,
+	fsys fs.FS,
 	dir string,
 	tmplVars map[string]any,
 	k8sClient ctrlruntimeclient.Client,
@@ -76,7 +76,7 @@ func (r *DeploymentSubroutine) renderAndApplyTemplates(
 	skipFile func(fileName string) bool,
 	postProcessObj func(ctx context.Context, obj *unstructured.Unstructured) error,
 ) error {
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func (r *DeploymentSubroutine) renderAndApplyTemplates(
 		}
 
 		// Read and render template (supports multi-document YAML)
-		objs, err := r.renderTemplateFile(path, tmplVars, log)
+		objs, err := r.renderTemplateFile(fsys, path, tmplVars, log)
 		if err != nil {
 			return errors.Wrap(err, "Failed to render template: %s", path)
 		}
@@ -126,6 +126,7 @@ func (r *DeploymentSubroutine) renderAndApplyTemplates(
 // single client it delegates the Apply to applyFunc, which can route each object to a different client.
 func (r *DeploymentSubroutine) renderAndApplyTemplatesWithRouter(
 	ctx context.Context,
+	fsys fs.FS,
 	dir string,
 	tmplVars map[string]any,
 	log *logger.Logger,
@@ -133,7 +134,7 @@ func (r *DeploymentSubroutine) renderAndApplyTemplatesWithRouter(
 	skipFile func(fileName string) bool,
 	applyFunc func(ctx context.Context, obj *unstructured.Unstructured) error,
 ) error {
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -146,7 +147,7 @@ func (r *DeploymentSubroutine) renderAndApplyTemplatesWithRouter(
 			return nil
 		}
 
-		objs, err := r.renderTemplateFile(path, tmplVars, log)
+		objs, err := r.renderTemplateFile(fsys, path, tmplVars, log)
 		if err != nil {
 			return errors.Wrap(err, "Failed to render template: %s", path)
 		}
@@ -171,8 +172,8 @@ func (r *DeploymentSubroutine) renderAndApplyTemplatesWithRouter(
 // renderTemplateFile reads a template file, renders it, and returns all unstructured objects.
 // Supports multi-document YAML (documents separated by "---").
 // Returns an empty slice if the template renders empty.
-func (r *DeploymentSubroutine) renderTemplateFile(path string, tmplVars map[string]any, log *logger.Logger) ([]*unstructured.Unstructured, error) {
-	templateBytes, err := os.ReadFile(path)
+func (r *DeploymentSubroutine) renderTemplateFile(fsys fs.FS, path string, tmplVars map[string]any, log *logger.Logger) ([]*unstructured.Unstructured, error) {
+	templateBytes, err := fs.ReadFile(fsys, path)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to read template file")
 	}

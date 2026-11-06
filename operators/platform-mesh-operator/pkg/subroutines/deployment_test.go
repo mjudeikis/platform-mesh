@@ -29,6 +29,7 @@ import (
 	"go.platform-mesh.io/golang-commons/context/keys"
 	"go.platform-mesh.io/golang-commons/logger"
 	"go.platform-mesh.io/platform-mesh-operator/internal/config"
+	"go.platform-mesh.io/platform-mesh-operator/manifests"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -208,7 +209,6 @@ func (s *DeploymentProcessTestSuite) newContext(operatorCfg config.OperatorConfi
 
 func (s *DeploymentProcessTestSuite) newOperatorConfig() config.OperatorConfig {
 	return config.OperatorConfig{
-		WorkspaceDir: s.tmpDir,
 		KCP: config.KCPConfig{
 			Namespace:      "platform-mesh-system",
 			RootShardName:  "root",
@@ -353,13 +353,13 @@ func (s *DeploymentProcessTestSuite) Test_Process_FluxCD_HappyPath() {
 	s.seedCertManagerCRDs(ctx, cl)
 
 	sub := &DeploymentSubroutine{
-		clientRuntime:            cl,
-		clientInfra:              cl,
-		cfg:                      &pmconfig.CommonServiceConfig{IsLocal: true},
-		cfgOperator:              &operatorCfg,
-		gotemplatesInfraDir:      filepath.Join(s.tmpDir, "gotemplates/infra"),
-		gotemplatesComponentsDir: filepath.Join(s.tmpDir, "gotemplates/components"),
-		workspaceDirectory:       filepath.Join(s.tmpDir, "manifests/k8s"),
+		clientRuntime:         cl,
+		clientInfra:           cl,
+		cfg:                   &pmconfig.CommonServiceConfig{IsLocal: true},
+		cfgOperator:           &operatorCfg,
+		gotemplatesInfra:      os.DirFS(filepath.Join(s.tmpDir, "gotemplates/infra")),
+		gotemplatesComponents: os.DirFS(filepath.Join(s.tmpDir, "gotemplates/components")),
+		k8sManifests:          os.DirFS(filepath.Join(s.tmpDir, "manifests/k8s")),
 	}
 
 	result, err := sub.Process(ctx, inst)
@@ -401,13 +401,13 @@ func (s *DeploymentProcessTestSuite) Test_Process_ArgoCD_HappyPath() {
 	s.seedCertManagerCRDs(ctx, cl)
 
 	sub := &DeploymentSubroutine{
-		clientRuntime:            cl,
-		clientInfra:              cl,
-		cfg:                      &pmconfig.CommonServiceConfig{IsLocal: true},
-		cfgOperator:              &operatorCfg,
-		gotemplatesInfraDir:      filepath.Join(s.tmpDir, "gotemplates/infra"),
-		gotemplatesComponentsDir: filepath.Join(s.tmpDir, "gotemplates/components"),
-		workspaceDirectory:       filepath.Join(s.tmpDir, "manifests/k8s"),
+		clientRuntime:         cl,
+		clientInfra:           cl,
+		cfg:                   &pmconfig.CommonServiceConfig{IsLocal: true},
+		cfgOperator:           &operatorCfg,
+		gotemplatesInfra:      os.DirFS(filepath.Join(s.tmpDir, "gotemplates/infra")),
+		gotemplatesComponents: os.DirFS(filepath.Join(s.tmpDir, "gotemplates/components")),
+		k8sManifests:          os.DirFS(filepath.Join(s.tmpDir, "manifests/k8s")),
 	}
 
 	result, err := sub.Process(ctx, inst)
@@ -444,13 +444,13 @@ func (s *DeploymentProcessTestSuite) Test_Process_CertManagerCRDsNotEstablished_
 	// cert-manager CRDs are NOT seeded — Process must stop and requeue.
 
 	sub := &DeploymentSubroutine{
-		clientRuntime:            cl,
-		clientInfra:              cl,
-		cfg:                      &pmconfig.CommonServiceConfig{IsLocal: true},
-		cfgOperator:              &operatorCfg,
-		gotemplatesInfraDir:      filepath.Join(s.tmpDir, "gotemplates/infra"),
-		gotemplatesComponentsDir: filepath.Join(s.tmpDir, "gotemplates/components"),
-		workspaceDirectory:       filepath.Join(s.tmpDir, "manifests/k8s"),
+		clientRuntime:         cl,
+		clientInfra:           cl,
+		cfg:                   &pmconfig.CommonServiceConfig{IsLocal: true},
+		cfgOperator:           &operatorCfg,
+		gotemplatesInfra:      os.DirFS(filepath.Join(s.tmpDir, "gotemplates/infra")),
+		gotemplatesComponents: os.DirFS(filepath.Join(s.tmpDir, "gotemplates/components")),
+		k8sManifests:          os.DirFS(filepath.Join(s.tmpDir, "manifests/k8s")),
 	}
 
 	result, err := sub.Process(ctx, inst)
@@ -479,13 +479,13 @@ func (s *DeploymentProcessTestSuite) Test_Process_MissingProfile() {
 		Build()
 
 	sub := &DeploymentSubroutine{
-		clientRuntime:            cl,
-		clientInfra:              cl,
-		cfg:                      &pmconfig.CommonServiceConfig{IsLocal: true},
-		cfgOperator:              &operatorCfg,
-		gotemplatesInfraDir:      filepath.Join(s.tmpDir, "gotemplates/infra"),
-		gotemplatesComponentsDir: filepath.Join(s.tmpDir, "gotemplates/components"),
-		workspaceDirectory:       filepath.Join(s.tmpDir, "manifests/k8s"),
+		clientRuntime:         cl,
+		clientInfra:           cl,
+		cfg:                   &pmconfig.CommonServiceConfig{IsLocal: true},
+		cfgOperator:           &operatorCfg,
+		gotemplatesInfra:      os.DirFS(filepath.Join(s.tmpDir, "gotemplates/infra")),
+		gotemplatesComponents: os.DirFS(filepath.Join(s.tmpDir, "gotemplates/components")),
+		k8sManifests:          os.DirFS(filepath.Join(s.tmpDir, "manifests/k8s")),
 	}
 
 	result, err := sub.Process(ctx, inst)
@@ -521,13 +521,13 @@ func (s *DeploymentProcessTestSuite) Test_Process_RootShardNotReady() {
 	s.Require().NoError(cl.Create(ctx, s.newFluxCDReadyCertManager(ns)))
 
 	sub := &DeploymentSubroutine{
-		clientRuntime:            cl,
-		clientInfra:              cl,
-		cfg:                      &pmconfig.CommonServiceConfig{IsLocal: true},
-		cfgOperator:              &operatorCfg,
-		gotemplatesInfraDir:      filepath.Join(s.tmpDir, "gotemplates/infra"),
-		gotemplatesComponentsDir: filepath.Join(s.tmpDir, "gotemplates/components"),
-		workspaceDirectory:       filepath.Join(s.tmpDir, "manifests/k8s"),
+		clientRuntime:         cl,
+		clientInfra:           cl,
+		cfg:                   &pmconfig.CommonServiceConfig{IsLocal: true},
+		cfgOperator:           &operatorCfg,
+		gotemplatesInfra:      os.DirFS(filepath.Join(s.tmpDir, "gotemplates/infra")),
+		gotemplatesComponents: os.DirFS(filepath.Join(s.tmpDir, "gotemplates/components")),
+		k8sManifests:          os.DirFS(filepath.Join(s.tmpDir, "manifests/k8s")),
 	}
 
 	result, err := sub.Process(ctx, inst)
@@ -569,13 +569,13 @@ func (s *DeploymentProcessTestSuite) Test_Process_DeploymentNamespace() {
 	s.seedCertManagerCRDs(ctx, cl)
 
 	sub := &DeploymentSubroutine{
-		clientRuntime:            cl,
-		clientInfra:              cl,
-		cfg:                      &pmconfig.CommonServiceConfig{IsLocal: true},
-		cfgOperator:              &operatorCfg,
-		gotemplatesInfraDir:      filepath.Join(s.tmpDir, "gotemplates/infra"),
-		gotemplatesComponentsDir: filepath.Join(s.tmpDir, "gotemplates/components"),
-		workspaceDirectory:       filepath.Join(s.tmpDir, "manifests/k8s"),
+		clientRuntime:         cl,
+		clientInfra:           cl,
+		cfg:                   &pmconfig.CommonServiceConfig{IsLocal: true},
+		cfgOperator:           &operatorCfg,
+		gotemplatesInfra:      os.DirFS(filepath.Join(s.tmpDir, "gotemplates/infra")),
+		gotemplatesComponents: os.DirFS(filepath.Join(s.tmpDir, "gotemplates/components")),
+		k8sManifests:          os.DirFS(filepath.Join(s.tmpDir, "manifests/k8s")),
 	}
 
 	result, err := sub.Process(ctx, inst)
@@ -689,7 +689,7 @@ func (s *DeploymentProcessTestSuite) Test_UpdateKcpWebhookSecret_RequeuesWhenCer
 func (s *DeploymentProcessTestSuite) Test_ManageAuthorizationWebhookSecrets_IssuesServingCertificateFromCA() {
 	ns := "platform-mesh-system"
 	cl, sub, ctx := s.newWebhookSecretFixture(ns, []byte("leaf"), []byte("ca"), []byte("ca"))
-	sub.workspaceDirectory = "../../manifests/k8s"
+	sub.k8sManifests = manifests.K8s()
 	inst := &pmcorev1alpha1.PlatformMesh{ObjectMeta: metav1.ObjectMeta{Name: "platform-mesh", Namespace: ns}}
 
 	_, err := sub.manageAuthorizationWebhookSecrets(ctx, inst)

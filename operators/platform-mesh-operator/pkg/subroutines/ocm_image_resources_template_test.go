@@ -17,27 +17,26 @@ limitations under the License.
 package subroutines
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.platform-mesh.io/golang-commons/logger"
+	"go.platform-mesh.io/platform-mesh-operator/gotemplates"
 )
 
 // renderGotemplateDocs renders a gotemplates/ file through the operator's own
 // renderTemplateFile and returns every YAML document as a generic map.
 func renderGotemplateDocs(t *testing.T, relPath string, data map[string]any) []map[string]any {
 	t.Helper()
-	path := filepath.Join("..", "..", "gotemplates", filepath.FromSlash(relPath))
 
 	cfg := logger.DefaultConfig()
 	cfg.NoJSON = true
 	log, err := logger.New(cfg)
 	require.NoError(t, err)
 
-	objs, err := (&DeploymentSubroutine{}).renderTemplateFile(path, data, log)
+	objs, err := (&DeploymentSubroutine{}).renderTemplateFile(gotemplates.FS, relPath, data, log)
 	require.NoError(t, err)
 
 	out := make([]map[string]any, len(objs))

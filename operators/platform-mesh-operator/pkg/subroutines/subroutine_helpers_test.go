@@ -32,6 +32,7 @@ import (
 	"go.platform-mesh.io/golang-commons/context/keys"
 	"go.platform-mesh.io/golang-commons/errors"
 	"go.platform-mesh.io/platform-mesh-operator/internal/config"
+	"go.platform-mesh.io/platform-mesh-operator/manifests"
 	"go.platform-mesh.io/platform-mesh-operator/pkg/subroutines/mocks"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -198,41 +199,6 @@ func (s *HelperTestSuite) TestGetWorkspaceName() {
 			}
 		})
 	}
-}
-
-func (s *HelperTestSuite) TestListFiles() {
-	dir := s.T().TempDir()
-
-	// Only manifests are listed: Go sources (manifests/kcp/embed.go), text
-	// files and subdirectories are not.
-	for _, name := range []string{"a.yaml", "b.yml", "embed.go", "notes.txt", "README"} {
-		s.Require().NoError(os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600))
-	}
-	for _, name := range []string{"01-sub", "other.yaml"} {
-		s.Require().NoError(os.Mkdir(filepath.Join(dir, name), 0o700))
-	}
-
-	result, err := ListFiles(dir)
-	s.Require().NoError(err)
-	s.ElementsMatch([]string{"a.yaml", "b.yml"}, result)
-}
-
-func (s *HelperTestSuite) TestListFiles_DirectoryNotExist() {
-	// Call ListFiles on a non-existent directory
-	result, err := ListFiles("/nonexistent/path/to/dir")
-	s.Error(err)
-	s.Empty(result)
-	s.Contains(err.Error(), "Failed to read directory")
-}
-
-func (s *HelperTestSuite) TestListFiles_EmptyDirectory() {
-	dir, err := os.MkdirTemp("", "listfiles-empty")
-	s.Require().NoError(err)
-	defer os.RemoveAll(dir) //nolint:errcheck
-
-	result, err := ListFiles(dir)
-	s.NoError(err)
-	s.Empty(result)
 }
 
 func (s *HelperTestSuite) TestIsWorkspace() {
@@ -410,21 +376,21 @@ func (s *HelperTestSuite) TestApplyManifestFromFile() {
 	cl := new(mocks.Client)
 	// Server-side apply (no Get needed)
 	cl.EXPECT().Apply(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	err := ApplyManifestFromFile(s.T().Context(), "../../manifests/kcp/workspace-platform-mesh-system.yaml", cl, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err := ApplyManifestFromFile(s.T().Context(), manifests.KCP(), "workspace-platform-mesh-system.yaml", cl, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Nil(err)
 
-	err = ApplyManifestFromFile(s.T().Context(), "invalid", nil, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err = ApplyManifestFromFile(s.T().Context(), manifests.KCP(), "invalid", nil, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Error(err)
 
-	err = ApplyManifestFromFile(s.T().Context(), "./kcpsetup.go", nil, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err = ApplyManifestFromFile(s.T().Context(), os.DirFS("."), "kcpsetup.go", nil, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Error(err)
 
 	cl.EXPECT().Apply(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("error")).Once()
-	err = ApplyManifestFromFile(s.T().Context(), "../../manifests/kcp/workspace-platform-mesh-system.yaml", cl, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err = ApplyManifestFromFile(s.T().Context(), manifests.KCP(), "workspace-platform-mesh-system.yaml", cl, make(map[string]any), "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Error(err)
 
 	cl.EXPECT().Apply(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
-	err = ApplyManifestFromFile(s.T().Context(), "../../manifests/kcp/02-root/workspace-orgs.yaml", cl, make(map[string]any), "root:orgs", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err = ApplyManifestFromFile(s.T().Context(), manifests.KCP(), "02-root/workspace-orgs.yaml", cl, make(map[string]any), "root:orgs", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Nil(err)
 
 	cl.EXPECT().Apply(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
@@ -436,7 +402,7 @@ func (s *HelperTestSuite) TestApplyManifestFromFile() {
 		KCP: config.OperatorConfig{}.KCP,
 	}
 	ctx := context.WithValue(s.T().Context(), keys.ConfigCtxKey, operatorCfg)
-	err = ApplyManifestFromFile(ctx, "../../manifests/kcp/04-platform-mesh-system/mutatingwebhookconfiguration-admissionregistration.k8s.io.yaml", cl, templateData, "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err = ApplyManifestFromFile(ctx, manifests.KCP(), "04-platform-mesh-system/mutatingwebhookconfiguration-admissionregistration.k8s.io.yaml", cl, templateData, "root:platform-mesh-system", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Nil(err)
 }
 
@@ -458,7 +424,7 @@ metadata:
 
 	cl := new(mocks.Client)
 	// Apply must NOT be called — resource matches the ignore list.
-	err = ApplyManifestFromFile(s.T().Context(), tmp.Name(), cl, make(map[string]any), "root", &pmcorev1alpha1.PlatformMesh{}, ignored)
+	err = ApplyManifestFromFile(s.T().Context(), os.DirFS(filepath.Dir(tmp.Name())), filepath.Base(tmp.Name()), cl, make(map[string]any), "root", &pmcorev1alpha1.PlatformMesh{}, ignored)
 	s.Assert().Nil(err)
 	cl.AssertNotCalled(s.T(), "Apply")
 }
@@ -478,7 +444,7 @@ metadata:
 	cl := new(mocks.Client)
 	cl.EXPECT().Apply(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	// Empty ignore list — resource must be applied.
-	err = ApplyManifestFromFile(s.T().Context(), tmp.Name(), cl, make(map[string]any), "root", &pmcorev1alpha1.PlatformMesh{}, nil)
+	err = ApplyManifestFromFile(s.T().Context(), os.DirFS(filepath.Dir(tmp.Name())), filepath.Base(tmp.Name()), cl, make(map[string]any), "root", &pmcorev1alpha1.PlatformMesh{}, nil)
 	s.Assert().Nil(err)
 	cl.AssertExpectations(s.T())
 }
@@ -499,7 +465,7 @@ metadata:
 	ignored := []config.IgnoredResource{{GroupVersionKind: schema.GroupVersionKind{Group: "ui.platform-mesh.io"}}}
 
 	cl := new(mocks.Client)
-	err = ApplyManifestFromFile(s.T().Context(), tmp.Name(), cl, make(map[string]any), "root", &pmcorev1alpha1.PlatformMesh{}, ignored)
+	err = ApplyManifestFromFile(s.T().Context(), os.DirFS(filepath.Dir(tmp.Name())), filepath.Base(tmp.Name()), cl, make(map[string]any), "root", &pmcorev1alpha1.PlatformMesh{}, ignored)
 	s.Assert().Nil(err)
 	cl.AssertNotCalled(s.T(), "Apply")
 }

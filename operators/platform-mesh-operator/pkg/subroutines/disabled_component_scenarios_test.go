@@ -18,8 +18,9 @@ package subroutines
 
 import (
 	"context"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"testing"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pmcorev1alpha1 "go.platform-mesh.io/apis/core/v1alpha1"
+	"go.platform-mesh.io/platform-mesh-operator/gotemplates"
 	"go.platform-mesh.io/platform-mesh-operator/internal/config"
 
 	corev1 "k8s.io/api/core/v1"
@@ -135,8 +137,8 @@ func renderHelmReleaseGraph(t *testing.T, sub *DeploymentSubroutine, inst *pmcor
 	log := testLogger(t)
 	graph := renderedGraph{}
 
-	collect := func(path string, vars map[string]any) {
-		objs, err := sub.renderTemplateFile(path, vars, log)
+	collect := func(fsys fs.FS, path string, vars map[string]any) {
+		objs, err := sub.renderTemplateFile(fsys, path, vars, log)
 		require.NoError(t, err, "rendering %s", path)
 		for _, obj := range objs {
 			if obj.GetKind() != "HelmRelease" {
@@ -163,28 +165,28 @@ func renderHelmReleaseGraph(t *testing.T, sub *DeploymentSubroutine, inst *pmcor
 	require.NoError(t, err)
 	skipFile := deploymentTechFileFilter(deploymentTechFluxCD, log)
 
-	infraDir := filepath.Join("..", "..", "gotemplates", "infra", "infra")
-	components, err := os.ReadDir(infraDir)
+	infra := gotemplates.Infra()
+	components, err := fs.ReadDir(infra, "infra")
 	require.NoError(t, err)
 	for _, component := range components {
 		if !component.IsDir() {
 			continue
 		}
-		componentDir := filepath.Join(infraDir, component.Name())
-		files, err := ListFiles(componentDir)
+		componentDir := path.Join("infra", component.Name())
+		files, err := fs.ReadDir(infra, componentDir)
 		require.NoError(t, err)
 		for _, file := range files {
-			if skipFile(file) {
+			if file.IsDir() || skipFile(file.Name()) {
 				continue
 			}
-			collect(filepath.Join(componentDir, file), infraVars)
+			collect(infra, path.Join(componentDir, file.Name()), infraVars)
 		}
 	}
 
 	// Component services: gotemplates/components/infra/helmreleases.yaml
 	componentVars, _, err := sub.buildComponentsTemplateVars(ctx, inst, apiextensionsv1.JSON{})
 	require.NoError(t, err)
-	collect(filepath.Join("..", "..", "gotemplates", "components", "infra", "helmreleases.yaml"), componentVars)
+	collect(gotemplates.Components(), "infra/helmreleases.yaml", componentVars)
 
 	return graph
 }

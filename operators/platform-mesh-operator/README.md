@@ -205,7 +205,6 @@ The operator binary accepts the following CLI flags (defined in `internal/config
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--workspace-dir` | `/operator/` | Root directory for templates and manifests |
 | `--kcp-url` | _(none)_ | KCP cluster URL |
 | `--kcp-namespace` | `platform-mesh-system` | KCP namespace |
 | `--kcp-root-shard-name` | `root` | KCP root shard name |
@@ -327,7 +326,7 @@ The operator supports two deployment technologies (configured per-section in the
 
 ### Templating
 
-The operator uses Go's `text/template` package to render Kubernetes manifests from YAML template files. Templates are located under `gotemplates/` (relative to `--workspace-dir`).
+The operator uses Go's `text/template` package to render Kubernetes manifests from YAML template files. Templates are located under `gotemplates/` and compiled into the binary (`gotemplates/embed.go`), as are the kcp and cluster manifests under `manifests/` (`manifests/embed.go`).
 
 #### Template Directory Structure
 

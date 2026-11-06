@@ -60,9 +60,7 @@ func (s *FeaturesTestSuite) SetupTest() {
 	cfg.NoJSON = true
 	cfg.Name = "FeaturesTestSuite"
 	s.log, _ = logger.New(cfg)
-	s.testObj = NewFeatureToggleSubroutine(s.clientMock, s.helperMock, &config.OperatorConfig{
-		WorkspaceDir: "../..",
-	}, "https://kcp.example.com")
+	s.testObj = NewFeatureToggleSubroutine(s.clientMock, s.helperMock, "https://kcp.example.com")
 }
 
 func (s *FeaturesTestSuite) TearDownTest() {
@@ -74,9 +72,7 @@ func (s *FeaturesTestSuite) TearDownTest() {
 func (s *FeaturesTestSuite) resetFeatureToggleTest() {
 	s.clientMock = new(mocks.Client)
 	s.helperMock = new(mocks.KcpHelper)
-	s.testObj = NewFeatureToggleSubroutine(s.clientMock, s.helperMock, &config.OperatorConfig{
-		WorkspaceDir: "../..",
-	}, "https://kcp.example.com")
+	s.testObj = NewFeatureToggleSubroutine(s.clientMock, s.helperMock, "https://kcp.example.com")
 }
 
 // setupFeatureToggleApplyMocks configures clients for one or more

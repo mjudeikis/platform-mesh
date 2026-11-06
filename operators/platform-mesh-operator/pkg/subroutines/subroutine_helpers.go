@@ -23,9 +23,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io/fs"
 	"net/url"
-	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strings"
 	"text/template"
@@ -315,12 +315,13 @@ func ConvertToUnstructured(webhook admissionregistrationv1.MutatingWebhookConfig
 	return unstructuredObj, nil
 }
 
-func GetWorkspaceDirs(dir string) []string {
+// GetWorkspaceDirs returns the subdirectories of dir in fsys named
+// "dd-name", e.g. "01-platform-mesh-system": each is a workspace to apply
+// into after the manifests of dir itself.
+func GetWorkspaceDirs(fsys fs.FS, dir string) []string {
 	workspaces := []string{}
-	// find all subdirectories named "dd-name", e.g. "01-platform-mesh-system"
-	dirs, err := os.ReadDir(dir)
+	dirs, err := fs.ReadDir(fsys, dir)
 	if err != nil {
-		// TODO: print error
 		return workspaces
 	}
 	for _, d := range dirs {
@@ -351,28 +352,6 @@ func IsWorkspace(dir string) bool {
 		return false
 	}
 	return match
-}
-
-// ListFiles returns the manifest files (*.yaml, *.yml) directly in dir.
-// Other files are ignored: the manifest directories also hold Go sources
-// (manifests/kcp/embed.go exposes them as an embed.FS) that must not be
-// applied.
-func ListFiles(dir string) ([]string, error) {
-	files := []string{}
-	dirs, err := os.ReadDir(dir)
-	if err != nil {
-		return files, errors.Wrap(err, "Failed to read directory")
-	}
-	for _, d := range dirs {
-		if d.IsDir() {
-			continue
-		}
-		switch filepath.Ext(d.Name()) {
-		case ".yaml", ".yml":
-			files = append(files, d.Name())
-		}
-	}
-	return files, nil
 }
 
 func MergeValuesAndServices(inst *pmcorev1alpha1.PlatformMesh, templateVars apiextensionsv1.JSON, config config.OperatorConfig) (apiextensionsv1.JSON, error) {
@@ -603,12 +582,12 @@ func WaitForWorkspace(
 
 func ApplyManifestFromFile(
 	ctx context.Context,
-	path string, k8sClient ctrlruntimeclient.Client, templateData map[string]any, wsPath string, inst *pmcorev1alpha1.PlatformMesh,
+	fsys fs.FS, path string, k8sClient ctrlruntimeclient.Client, templateData map[string]any, wsPath string, inst *pmcorev1alpha1.PlatformMesh,
 	ignoredResources []config.IgnoredResource,
 ) error {
 	log := logger.LoadLoggerFromContext(ctx)
 
-	obj, err := unstructuredFromFile(path, templateData, log)
+	obj, err := unstructuredFromFile(fsys, path, templateData, log)
 	if err != nil {
 		return err
 	}
@@ -668,8 +647,13 @@ func ApplyManifestFromFile(
 	return nil
 }
 
+// ApplyDirStructure applies the manifests in dir of fsys into the kcp
+// workspace kcpPath, then recurses into the workspace subdirectories
+// (GetWorkspaceDirs) after waiting for each workspace. fsys is one of the
+// embedded trees (manifests.KCP, manifests.Features); dir is "." for its root.
 func ApplyDirStructure(
 	ctx context.Context,
+	fsys fs.FS,
 	dir string,
 	kcpPath string,
 	config *rest.Config,
@@ -686,17 +670,20 @@ func ApplyDirStructure(
 	}
 
 	// apply all manifest files in the current directory first
-	files, err := ListFiles(dir)
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return errors.Wrap(err, "Failed to list files in workspace")
 	}
 	var errApplyManifests error
-	for _, file := range files {
+	for _, entry := range entries {
+		if entry.IsDir() || (path.Ext(entry.Name()) != ".yaml" && path.Ext(entry.Name()) != ".yml") {
+			continue
+		}
+		file := path.Join(dir, entry.Name())
 		log.Debug().Str("file", file).Msg("Applying file")
-		path := filepath.Join(dir, file)
-		err := ApplyManifestFromFile(ctx, path, k8sClient, templateData, kcpPath, inst, ignoredResources)
+		err := ApplyManifestFromFile(ctx, fsys, file, k8sClient, templateData, kcpPath, inst, ignoredResources)
 		if err != nil {
-			log.Warn().Err(err).Str("file", path).Msg("Failed to apply manifest file, continuing to next file in directory")
+			log.Warn().Err(err).Str("file", file).Msg("Failed to apply manifest file, continuing to next file in directory")
 			errApplyManifests = err
 		}
 	}
@@ -704,7 +691,7 @@ func ApplyDirStructure(
 		return errApplyManifests
 	}
 
-	for _, wsDir := range GetWorkspaceDirs(dir) {
+	for _, wsDir := range GetWorkspaceDirs(fsys, dir) {
 		wsName, err := GetWorkspaceName(wsDir)
 		if err != nil {
 			log.Warn().Err(err).Str("Directory", dir).Str("wsName", wsName).Msg("Failed to get workspace path, skipping")
@@ -722,7 +709,7 @@ func ApplyDirStructure(
 			}
 		}
 
-		err = ApplyDirStructure(ctx, dir+"/"+wsDir, wsPath, config, templateData, inst, kcpHelper, ignoredResources)
+		err = ApplyDirStructure(ctx, fsys, path.Join(dir, wsDir), wsPath, config, templateData, inst, kcpHelper, ignoredResources)
 		if err != nil {
 			return err
 		}
@@ -753,10 +740,10 @@ func matchesConditionWithStatus(resource *unstructured.Unstructured, conditionTy
 	return false
 }
 
-func unstructuredFromFile(path string, templateData map[string]any, log *logger.Logger) (unstructured.Unstructured, error) {
-	manifestBytes, err := os.ReadFile(path)
+func unstructuredFromFile(fsys fs.FS, path string, templateData map[string]any, log *logger.Logger) (unstructured.Unstructured, error) {
+	manifestBytes, err := fs.ReadFile(fsys, path)
 	if err != nil {
-		return unstructured.Unstructured{}, errors.Wrap(err, "Failed to read file, pwd: %s", path)
+		return unstructured.Unstructured{}, errors.Wrap(err, "Failed to read file: %s", path)
 	}
 
 	res, err := ReplaceTemplate(templateData, manifestBytes)

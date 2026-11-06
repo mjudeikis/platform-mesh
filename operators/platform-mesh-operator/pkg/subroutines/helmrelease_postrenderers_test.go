@@ -18,11 +18,12 @@ package subroutines
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"go.platform-mesh.io/platform-mesh-operator/gotemplates"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -37,7 +38,7 @@ func renderServiceHelmReleases(t *testing.T, profileYAML string) map[string]*uns
 	vars, _, err := sub.buildComponentsTemplateVars(context.Background(), inst, apiextensionsv1.JSON{})
 	require.NoError(t, err)
 
-	objs, err := sub.renderTemplateFile(filepath.Join("..", "..", "gotemplates", "components", "infra", "helmreleases.yaml"), vars, testLogger(t))
+	objs, err := sub.renderTemplateFile(gotemplates.Components(), "infra/helmreleases.yaml", vars, testLogger(t))
 	require.NoError(t, err)
 
 	releases := map[string]*unstructured.Unstructured{}
